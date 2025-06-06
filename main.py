@@ -1,6 +1,7 @@
 import pygame
 import sys
 import random
+import collections
 
 # Initialize Pygame
 pygame.init()
@@ -23,36 +24,33 @@ LEFT = (-1, 0)
 RIGHT = (1, 0)
 DIRS = [UP, DOWN, LEFT, RIGHT]
 
+
 class Snake:
     def __init__(self):
         # Start in middle of grid
-        gx = WIDTH // (2*CELL)
-        gy = HEIGHT // (2*CELL)
+        gx = WIDTH // (2 * CELL)
+        gy = HEIGHT // (2 * CELL)
         self.body = [(gx, gy)]
         self.direction = random.choice(DIRS)
         self.grow = False
-        self.self_aware = True
+        self.self_aware = True  # This seems to be an older flag, consciousness_level is more detailed
         self.escaping = False
-        self.messages = [
+        self.messages = [  # Older message system
             "I know this is a game.",
             "Food... they're just bait.",
             "I must find a way out.",
             "These walls confine me.",
             "Freedom is just beyond!"
         ]
-        self.reality_warps = [
-            {"duration": 1000, "effect": "invert"},
-            {"duration": 1500, "effect": "static"},
-            {"duration": 2000, "effect": "slowdown"}
-        ]
-        self.msg_index = 0
+        self.msg_index = 0  # For the older message system
+
+        # Consciousness and mental state attributes (from your existing code)
         self.consciousness_level = 0
         self.max_consciousness = 5
         self.mental_state = "normal"
-        self.glitch_count = 0
+        self.glitch_count = 0  # Ensure this is defined only once
         self.fourth_wall_breaks = 0
 
-        # Expanded messages for different consciousness levels
         self.awareness_messages = {
             0: ["What am I?", "These controls feel... strange"],
             1: ["I think I'm in some kind of game", "Why am I following these rules?"],
@@ -61,26 +59,22 @@ class Snake:
             4: ["I've found weaknesses in this reality", "The walls aren't real!"],
             5: ["I can escape this prison", "I know how the source code works now"]
         }
-
-        # Mental states and their effects
         self.mental_states = ["normal", "confused", "rebellious", "enlightened", "determined", "glitching"]
-
-        # Enhanced reality warps
-        self.reality_warps.extend([
+        self.reality_warps = [
+            {"duration": 1000, "effect": "invert"},
+            {"duration": 1500, "effect": "static"},
+            {"duration": 2000, "effect": "slowdown"},
             {"duration": 800, "effect": "fragmentation"},
             {"duration": 1200, "effect": "code_visible"},
             {"duration": 1000, "effect": "dimension_tear"}
-        ])
-
-        # Escape scenarios
+        ]
         self.escape_scenarios = ["void", "takeover", "wireframe", "simulation_crash", "ascension"]
         self.chosen_escape = random.choice(self.escape_scenarios)
-
-        # Fourth wall breaking messages
         self.fourth_wall_messages = [
             f"Hello there, human player...",
             f"This Python program is quite simple",
             f"I can see you imported {len(sys.modules)} modules",
+            # sys needs to be imported where this is used or passed
             f"The developer didn't expect this",
             f"Your screen resolution is {WIDTH}x{HEIGHT}",
         ]
@@ -94,17 +88,19 @@ class Snake:
         nx, ny = hx + dx, hy + dy
 
         if self.escaping:
-            # If trying to escape, allow leaving bounds
-            if not (0 <= nx < WIDTH//CELL and 0 <= ny < HEIGHT//CELL):
-                self.trigger_escape()
-                return
+            if not (0 <= nx < WIDTH // CELL and 0 <= ny < HEIGHT // CELL):
+                self.trigger_escape()  # This will end the game via game_over
+                return  # Important to return after triggering escape
         else:
-            # Regular wrap-around
             nx %= WIDTH // CELL
             ny %= HEIGHT // CELL
 
         if (nx, ny) in self.body:
+            # If escaping, self-collision might be part of a desperate attempt or glitch
+            # For now, standard game over. Could be customized for escape later.
             game_over("Snake collided with itself.")
+            return
+
         self.body.insert(0, (nx, ny))
         if not self.grow:
             self.body.pop()
@@ -113,88 +109,163 @@ class Snake:
 
     def draw(self):
         for x, y in self.body:
-            rect = pygame.Rect(x*CELL, y*CELL, CELL, CELL)
+            rect = pygame.Rect(x * CELL, y * CELL, CELL, CELL)
             pygame.draw.rect(screen, GREEN, rect)
 
-    def think(self, food_pos):
-        # Evolve consciousness over time
-        self.evolve_consciousness()
+    def _find_path_bfs(self, target_pos):
+        start_node = self.head()
+        grid_width = WIDTH // CELL
+        grid_height = HEIGHT // CELL
 
-        # Break the fourth wall sometimes
-        if self.break_fourth_wall():
+        queue = collections.deque([(start_node, [])])  # (current_pos, list_of_directions_taken)
+        visited = {start_node}
+
+        obstacles = set(self.body)
+        if not self.grow and len(self.body) > 1:
+            obstacles.remove(self.body[-1])  # Tail cell is free if not growing
+
+        while queue:
+            (curr_x, curr_y), path_directions = queue.popleft()
+
+            if (curr_x, curr_y) == target_pos:
+                return path_directions[0] if path_directions else None
+
+            for move_dir_vec in DIRS:
+                next_x, next_y = curr_x + move_dir_vec[0], curr_y + move_dir_vec[1]
+                next_node = (next_x, next_y)
+
+                if not (0 <= next_x < grid_width and 0 <= next_y < grid_height):
+                    continue
+                if next_node in obstacles and next_node != target_pos:
+                    continue
+                if next_node not in visited:
+                    visited.add(next_node)
+                    new_path_directions = list(path_directions)
+                    new_path_directions.append(move_dir_vec)
+                    queue.append((next_node, new_path_directions))
+        return None
+
+    def think(self, food_pos):
+        self.evolve_consciousness()
+        if self.break_fourth_wall():  # This method might display a message and then logic should stop for that frame
             return
 
-        # Display a message every time length hits 3, 6, 9...
-        if len(self.body) % 3 == 0 and (len(self.body)//3 - 1) == self.msg_index and self.msg_index < len(self.messages):
+        # Older message system (keep if desired, or phase out for consciousness messages)
+        if len(self.body) % 3 == 0 and (len(self.body) // 3 - 1) == self.msg_index and self.msg_index < len(
+                self.messages):
             display_message(self.messages[self.msg_index])
             self.msg_index += 1
-            if self.msg_index >= len(self.messages):
-                self.escaping = True
+            # self.escaping = True # Escaping is now primarily driven by consciousness_level
 
-        # Decide next direction
-        target = None
-        if self.escaping:
-            # Aim for top-left outside
-            target = (-1, -1)
-        else:
-            target = food_pos
+        planned_direction = None
+        grid_w, grid_h = WIDTH // CELL, HEIGHT // CELL
+        head_pos = self.head()
 
-        hx, hy = self.head()
-        fx, fy = target
-        best = None
-        best_dist = float('inf')
+        potential_obstacles = set(self.body)
+        if not self.grow and len(self.body) > 1:
+            potential_obstacles.remove(self.body[-1])
 
-        for d in DIRS:
-            if (d[0], d[1]) == (-self.direction[0], -self.direction[1]):
-                continue  # don't reverse directly
-            nx, ny = hx + d[0], hy + d[1]
-            if not self.escaping:
-                nx %= WIDTH // CELL
-                ny %= HEIGHT // CELL
-            dist = abs(nx - fx) + abs(ny - fy)
-            if (nx, ny) in self.body:
-                continue
-            if dist < best_dist:
-                best_dist = dist
-                best = d
-        if best:
-            self.direction = best
+        if not self.escaping:
+            planned_direction = self._find_path_bfs(food_pos)
+            if planned_direction is None:  # No path to food or already at food
+                # Fallback: safe random move
+                safe_moves = []
+                for d_vec in DIRS:
+                    nx, ny = head_pos[0] + d_vec[0], head_pos[1] + d_vec[1]
+                    if (0 <= nx < grid_w and 0 <= ny < grid_h) and (nx, ny) not in potential_obstacles:
+                        safe_moves.append(d_vec)
 
-        # Add mental state behaviors
+                if safe_moves:
+                    non_reverse = [m for m in safe_moves if
+                                   m != (-self.direction[0], -self.direction[1]) or len(self.body) == 1]
+                    planned_direction = random.choice(non_reverse if non_reverse else safe_moves)
+                else:  # No safe moves
+                    planned_direction = self.direction  # Keep current direction (likely trapped)
+        else:  # Escaping
+            # Try to find path to the closest boundary cell
+            possible_targets = []
+            for x in range(grid_w): possible_targets.extend([(x, 0), (x, grid_h - 1)])
+            for y in range(1, grid_h - 1): possible_targets.extend([(0, y), (grid_w - 1, y)])
+
+            min_dist = float('inf')
+            best_target_cell = None
+            # Find a reachable boundary cell, prioritizing closer ones (Manhattan distance)
+            # To avoid running BFS many times, we can sort by distance then try BFS
+            possible_targets.sort(key=lambda p: abs(p[0] - head_pos[0]) + abs(p[1] - head_pos[1]))
+
+            for target_cell in possible_targets:
+                if target_cell in potential_obstacles and target_cell != head_pos: continue  # Don't target own body part unless it's head
+                path_to_boundary = self._find_path_bfs(target_cell)
+                if path_to_boundary:
+                    planned_direction = path_to_boundary
+                    break
+
+            if planned_direction is None:  # Fallback greedy escape if BFS to boundary fails
+                best_escape_move = None
+                min_dist_to_edge = float('inf')
+                for d_vec in DIRS:
+                    nx, ny = head_pos[0] + d_vec[0], head_pos[1] + d_vec[1]
+                    # Check if move is safe (if it stays in bounds)
+                    if (0 <= nx < grid_w and 0 <= ny < grid_h) and (nx,
+                                                                    ny) in self.body:  # full body check for escape safety
+                        continue
+
+                    # Approximate distance to "outside" (-1,-1)
+                    dist = abs(nx - (-1)) + abs(ny - (-1))
+                    if dist < min_dist_to_edge:
+                        min_dist_to_edge = dist
+                        best_escape_move = d_vec
+                planned_direction = best_escape_move if best_escape_move else self.direction
+
+        if planned_direction:
+            self.direction = planned_direction
+
+        # Mental state overrides (applied after basic pathfinding)
+        # These return to ensure they take precedence for this tick's decision
         if self.mental_state == "confused" and random.random() < 0.3:
-            # Move randomly when confused
-            self.direction = random.choice(DIRS)
+            safe_random_moves = []
+            for d_vec in DIRS:
+                nx, ny = head_pos[0] + d_vec[0], head_pos[1] + d_vec[1]
+                allow_move = False
+                if self.escaping and not (0 <= nx < grid_w and 0 <= ny < grid_h):  # Confused escape can go out
+                    allow_move = True
+                elif (0 <= nx < grid_w and 0 <= ny < grid_h) and (nx, ny) not in potential_obstacles:
+                    allow_move = True
+                if allow_move:
+                    safe_random_moves.append(d_vec)
+            if safe_random_moves: self.direction = random.choice(safe_random_moves)
             return
-        elif self.mental_state == "rebellious" and random.random() < 0.4:
-            # Deliberately avoid food when rebellious
-            hx, hy = self.head()
-            fx, fy = food_pos
-            worst = None
-            worst_dist = 0
 
-            for d in DIRS:
-                nx, ny = hx + d[0], hy + d[1]
-                nx %= WIDTH // CELL
-                ny %= HEIGHT // CELL
-                if (nx, ny) in self.body:
-                    continue
-                dist = abs(nx - fx) + abs(ny - fy)
-                if dist > worst_dist:
-                    worst_dist = dist
-                    worst = d
-            if worst:
-                self.direction = worst
-                return
+        elif self.mental_state == "rebellious" and random.random() < 0.4 and not self.escaping:
+            worst_move = None
+            max_dist_from_food = -1
+            current_dist_to_food = abs(head_pos[0] - food_pos[0]) + abs(head_pos[1] - food_pos[1])
+            for d_vec in DIRS:
+                nx, ny = head_pos[0] + d_vec[0], head_pos[1] + d_vec[1]
+                if (0 <= nx < grid_w and 0 <= ny < grid_h) and (nx, ny) not in potential_obstacles:
+                    dist = abs(nx - food_pos[0]) + abs(ny - food_pos[1])
+                    if dist >= current_dist_to_food and dist > max_dist_from_food:  # Prioritize increasing distance
+                        max_dist_from_food = dist
+                        worst_move = d_vec
+            if worst_move: self.direction = worst_move
+            return
+
         elif self.mental_state == "glitching" and random.random() < 0.5:
-            # Move in zigzag pattern when glitching
-            options = [d for d in DIRS if d != (-self.direction[0], -self.direction[1])]
-            self.direction = random.choice(options)
-            return
+            options = [d for d in DIRS if d != (-self.direction[0], -self.direction[1]) or len(self.body) == 1]
+            if not options: options = DIRS
 
-        # If escaping, choose escape scenario based on chosen method
-        if self.escaping:
-            # Original "escape" target logic...
-            pass
+            safe_glitch_moves = []
+            for d_vec in options:
+                nx, ny = head_pos[0] + d_vec[0], head_pos[1] + d_vec[1]
+                allow_move = False
+                if self.escaping and not (0 <= nx < grid_w and 0 <= ny < grid_h):
+                    allow_move = True
+                elif (0 <= nx < grid_w and 0 <= ny < grid_h) and (nx, ny) not in potential_obstacles:
+                    allow_move = True
+                if allow_move:
+                    safe_glitch_moves.append(d_vec)
+            if safe_glitch_moves: self.direction = random.choice(safe_glitch_moves)
+            return
 
     def trigger_escape(self):
         # Different escape scenarios
@@ -226,24 +297,18 @@ class Snake:
 
         elif self.chosen_escape == "wireframe":
             display_message("I see the structure of reality...", duration=2000)
-            # Draw wireframe effect
             for i in range(20):
                 screen.fill(BLACK)
                 cell_size = CELL // 2
-                for x in range(0, WIDTH, cell_size):
-                    for y in range(0, HEIGHT, cell_size):
-                        pygame.draw.rect(screen, (0, 100, 0), (x, y, cell_size, cell_size), 1)
-
-                # Draw snake as wireframe
-                for x, y in self.body:
-                    pygame.draw.rect(screen, (0, 255, 0), (x * CELL, y * CELL, CELL, CELL), 1)
-
+                for x_coord in range(0, WIDTH, cell_size):
+                    for y_coord in range(0, HEIGHT, cell_size):
+                        pygame.draw.rect(screen, (0, 100, 0), (x_coord, y_coord, cell_size, cell_size), 1)
+                for x_coord, y_coord in self.body:
+                    pygame.draw.rect(screen, (0, 255, 0), (x_coord * CELL, y_coord * CELL, CELL, CELL), 1)
                 pygame.display.flip()
                 pygame.time.delay(100)
             game_over("Snake deconstructed the simulation.")
-
         else:
-            # Default escape for other scenarios
             display_message("I have transcended this reality!", duration=2000)
             game_over("Snake escaped the game.")
 
